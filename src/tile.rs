@@ -108,10 +108,11 @@ impl Tile {
                     };
                 }
             }
-            Self::Farmed { plant, .. } => {
+            Self::Farmed { plant, time, .. } => {
                 if let Some(farm_plant) = plant {
                     if farm_plant.harvestable() {
                         if ctx.mouse_input.down(&MouseButton::Right) {
+                            *time = cfg.tile.grass_growth_time;
                             *plant = None;
                         }
                     }
@@ -134,7 +135,7 @@ impl Tile {
                     *time -= ctx.delta_time;
 
                     if *time <= 0.0 {
-                        *plant = None;
+                        *self = Tile::Grass;
                     }
                 }
             }

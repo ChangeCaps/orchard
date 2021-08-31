@@ -1,8 +1,4 @@
-use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
-    fs::read_to_string,
-    hash::{Hash, Hasher},
-};
+use std::{collections::HashMap, fs::read_to_string};
 
 use ike::{
     d2::{
@@ -15,17 +11,19 @@ use ike::{
 
 use crate::{
     assets::Assets,
+    cloth::Cloth,
     config::Config,
     iso::{from_iso, to_iso},
+    render::{Ctx, Mesh, Vertex},
     tile::Tile,
 };
 
-pub struct Camera {
+pub struct OrthographicCamera {
     pub projection: OrthographicProjection,
     pub transform: Transform2d,
 }
 
-impl Camera {
+impl OrthographicCamera {
     #[inline]
     pub fn new() -> Self {
         Self {
@@ -38,7 +36,7 @@ impl Camera {
     }
 
     #[inline]
-    pub fn id(&self) -> Id {
+    pub fn id(&self) -> Id<Camera> {
         self.projection.id
     }
 
@@ -51,7 +49,8 @@ impl Camera {
 pub struct GameState {
     pub assets: Assets,
     pub config: Config,
-    pub main_camera: Camera,
+    pub cloth: Cloth,
+    pub main_camera: OrthographicCamera,
     pub tiles: HashMap<IVec2, Tile>,
     pub time: f32,
     pub mouse_position: Vec2,
@@ -63,7 +62,7 @@ impl Render2d for GameState {
             &mut self.assets.cursor,
             &Transform2d::from_translation(self.mouse_position),
             500.0,
-        ); 
+        );
 
         // draw tiles
         for (position, tile) in &self.tiles {
@@ -103,7 +102,7 @@ impl Render2d for GameState {
 impl State for GameState {
     fn start(&mut self, ctx: &mut StartCtx) {
         ctx.window.maximized = true;
-        ctx.window.cursor_visible = false;
+        //ctx.window.cursor_visible = false;
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx) {
@@ -151,12 +150,10 @@ impl State for GameState {
             (ctx.mouse.position - ctx.window.size.as_f32() / 2.0) / ctx.window.size.y as f32;
         mouse_pos.y *= -1.0;
 
-        self.mouse_position = mouse_pos * self.main_camera.projection.size + self.main_camera.transform.translation;
+        self.mouse_position =
+            mouse_pos * self.main_camera.projection.size + self.main_camera.transform.translation;
 
-        let mouse = to_iso(
-            self.mouse_position,
-            Vec2::splat(40.0),
-        );
+        let mouse = to_iso(self.mouse_position, Vec2::splat(40.0));
 
         // update tiles
         for (position, tile) in self.tiles.iter_mut() {
@@ -171,6 +168,12 @@ impl State for GameState {
 
             tile.update(ctx, &self.config);
         }
+
+        self.cloth.update(
+            ctx.delta_time,
+            Vec3::new(-1.25, 0.0, -1.25),
+            Vec2::new((self.time * 10.0).cos() - 1.0, (self.time * 10.0).sin() - 1.0),
+        );
     }
 
     #[inline]
@@ -194,10 +197,23 @@ impl GameState {
         Ok(Self {
             assets: Assets::load()?,
             config: toml::from_str(&config)?,
-            main_camera: Camera::new(),
+            cloth: Cloth::generate(20, 5),
+            main_camera: OrthographicCamera::new(),
             tiles,
             time: 0.0,
             mouse_position: Default::default(),
         })
+    }
+
+    #[inline]
+    pub fn render(&mut self, ctx: &mut Ctx) {
+        let mut transform = Transform3d::IDENTITY;
+        transform.rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_4);
+        transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_4);
+
+        let mut cloth_transform = Transform3d::from_xyz(0.0, 10.0, 0.0);
+        cloth_transform = &transform * cloth_transform; 
+
+        ctx.render_mesh(&self.cloth.mesh, cloth_transform.matrix());
     }
 }

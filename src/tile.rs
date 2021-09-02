@@ -2,8 +2,9 @@ use ike::{
     d2::{render::Render2dCtx, sprite::Sprite, transform2d::Transform2d},
     prelude::*,
 };
+use rand::Rng;
 
-use crate::{assets::Assets, config::Config, iso::from_iso};
+use crate::{assets::Assets, cloth::Cloth, config::Config, iso::from_iso, render::Ctx};
 
 #[derive(Debug)]
 pub enum FarmPlant {
@@ -40,16 +41,90 @@ impl FarmPlant {
     }
 }
 
+pub enum Structure {
+    Pole { cloth: Cloth, frames: u8, time: f32},
+}
+
+impl Structure {
+    #[inline]
+    pub fn update(&mut self, ctx: &mut UpdateCtx, cfg: &Config) {
+        match self {
+            Structure::Pole { cloth, frames, time } => {
+                if cfg.graphics.instance_cloth {
+                    return;
+                }
+
+                *frames += 1;
+
+                *time += ctx.delta_time;
+
+                if *frames >= 2 {
+                    *frames = 0;
+
+                    cloth.update(
+                        ctx.delta_time * 2.0,
+                        Vec3::new(-1.25, 0.0, -1.25),
+                        Vec2::new((*time * 10.0).cos() - 1.0, (*time * 10.0).sin() - 1.0),
+                    );
+                }
+            }
+        }
+    }
+
+    #[inline]
+    pub fn texture<'a>(&self, assets: &'a mut Assets) -> &'a mut Texture {
+        match self {
+            Self::Pole { .. } => &mut assets.pole,
+        }
+    }
+
+    #[inline]
+    pub fn mesh_render(
+        &self,
+        ctx: &mut Ctx,
+        position: Vec3,
+        transform: &Transform3d,
+        instanced_cloth: &Cloth,
+        cfg: &Config,
+    ) {
+        match self {
+            Self::Pole { cloth, .. } => {
+                let transform = transform
+                    * Transform3d::from_translation(position + Vec3::new(-5.0, 30.5, 0.0));
+
+                if cfg.graphics.instance_cloth {
+                    ctx.render_mesh(&instanced_cloth.mesh, transform.matrix());
+                } else {
+                    ctx.render_mesh(&cloth.mesh, transform.matrix());
+                }
+            }
+        }
+    }
+}
+
 pub enum Tile {
-    Grass,
+    Grass { structure: Option<Structure> },
     Farmed { time: f32, plant: Option<FarmPlant> },
 }
 
 impl Tile {
     #[inline]
+    pub fn grass() -> Self {
+        let mut rng = rand::thread_rng();
+
+        Self::Grass {
+            structure: Some(Structure::Pole {
+                cloth: Cloth::generate(15, 4),
+                frames: 0,
+                time: rng.gen_range(0.0..std::f32::consts::PI),
+            }),
+        }
+    }
+
+    #[inline]
     pub fn texture<'a>(&self, assets: &'a mut Assets) -> &'a mut Texture {
         match self {
-            Self::Grass => &mut assets.base_tile,
+            Self::Grass { .. } => &mut assets.base_tile,
             Self::Farmed { .. } => &mut assets.farm_tile,
         }
     }
@@ -70,7 +145,6 @@ impl Tile {
                         let pos = plant_pos + tile_pos;
 
                         // generate plant texture hash
-
                         let texture = plant.texture(assets, 0);
 
                         let sprite = Sprite {
@@ -81,7 +155,7 @@ impl Tile {
                                 pos + Vec2::new(0.0, texture.height as f32 / 2.0),
                             )
                             .matrix(),
-                            depth: -(pos.y - 5.0) * 0.01,
+                            depth: -(pos.y - 5.0) / 0.5f32.asin().tan(),
                             width: texture.width,
                             height: texture.height,
                             min: Vec2::ZERO,
@@ -93,6 +167,48 @@ impl Tile {
                     }
                 }
             }
+            Self::Grass {
+                structure: Some(structure),
+                ..
+            } => {
+                let texture = structure.texture(assets);
+
+                let sprite = Sprite {
+                    view: texture
+                        .texture(ctx.render_ctx)
+                        .create_view(&Default::default()),
+                    transform: Transform2d::from_translation(tile_pos + Vec2::new(0.0, 14.0))
+                        .matrix(),
+                    depth: -(tile_pos.y - 14.0) / 0.5f32.asin().tan(),
+                    width: texture.width,
+                    height: texture.height,
+                    min: Vec2::ZERO,
+                    max: Vec2::ONE,
+                    texture_id: texture.id,
+                };
+
+                ctx.draw_sprite(sprite);
+            }
+            _ => {}
+        }
+    }
+
+    #[inline]
+    pub fn render_mesh(
+        &self,
+        ctx: &mut Ctx,
+        position: Vec3,
+        transform: &Transform3d,
+        instanced_cloth: &Cloth,
+        cfg: &Config,
+    ) {
+        match self {
+            Self::Grass {
+                structure: Some(structure),
+                ..
+            } => {
+                structure.mesh_render(ctx, position, transform, instanced_cloth, cfg);
+            }
             _ => {}
         }
     }
@@ -100,7 +216,7 @@ impl Tile {
     #[inline]
     pub fn hovered(&mut self, ctx: &mut UpdateCtx, cfg: &Config) {
         match self {
-            Self::Grass => {
+            Self::Grass { .. } => {
                 if ctx.mouse_input.down(&MouseButton::Right) {
                     *self = Self::Farmed {
                         time: cfg.tile.grass_growth_time,
@@ -128,6 +244,11 @@ impl Tile {
     #[inline]
     pub fn update(&mut self, ctx: &mut UpdateCtx, cfg: &Config) {
         match self {
+            Self::Grass { structure } => {
+                if let Some(structure) = structure {
+                    structure.update(ctx, cfg);
+                }
+            }
             Self::Farmed { time, plant } => {
                 if let Some(plant) = plant {
                     plant.update(ctx, cfg);
@@ -135,11 +256,10 @@ impl Tile {
                     *time -= ctx.delta_time;
 
                     if *time <= 0.0 {
-                        *self = Tile::Grass;
+                        *self = Tile::grass();
                     }
                 }
             }
-            _ => {}
         }
     }
 }

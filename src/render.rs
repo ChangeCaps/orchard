@@ -1,88 +1,11 @@
-use std::{
-    collections::HashMap,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::collections::HashMap;
 
 use bytemuck::{bytes_of, cast_slice};
 pub use ike::prelude::*;
 use ike::wgpu::util::DeviceExt;
+use ike::d3::mesh::{Vertices, Indices};
 
 use crate::game_state::GameState;
-
-#[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vertex {
-    pub position: Vec3,
-    pub normal: Vec3,
-    pub uv: Vec2,
-    pub color: Color,
-}
-
-#[derive(Default)]
-pub struct Mesh {
-    id: Id<Self>,
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
-    changed: AtomicBool,
-}
-
-impl Mesh {
-    #[inline]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    #[inline]
-    pub fn mark_changed(&self) {
-        self.changed.store(true, Ordering::SeqCst);
-    }
-
-    #[inline]
-    pub fn calculate_normals(&mut self) {
-        for vertex in &mut self.vertices {
-            vertex.normal = Vec3::ZERO;
-        }
-
-        for i in 0..self.indices.len() / 3 {
-            let i0 = self.indices[i * 3 + 0];
-            let i1 = self.indices[i * 3 + 1];
-            let i2 = self.indices[i * 3 + 2];
-
-            let p0 = self.vertices[i0 as usize].position;
-            let p1 = self.vertices[i1 as usize].position;
-            let p2 = self.vertices[i2 as usize].position;
-
-            let normal = (p2 - p0).cross(p1 - p0).normalize();
-
-            self.vertices[i0 as usize].normal += normal;
-            self.vertices[i1 as usize].normal += normal;
-            self.vertices[i2 as usize].normal += normal;
-        }
-
-        for vertex in &mut self.vertices {
-            vertex.normal = vertex.normal.normalize();
-        }
-    }
-}
-
-impl HasId<Mesh> for Mesh {
-    #[inline]
-    fn id(&self) -> Id<Mesh> {
-        self.id
-    }
-}
-
-impl Clone for Mesh {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self {
-            id: Id::new(),
-            vertices: self.vertices.clone(),
-            indices: self.indices.clone(),
-            changed: AtomicBool::new(true),
-        }
-    }
-}
 
 struct MeshInstance {
     index_count: u32,
@@ -92,45 +15,76 @@ struct MeshInstance {
     instance_buffer: Option<wgpu::Buffer>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MeshId {
+    pub vertex: Id<Vertices>,
+    pub index: Id<Indices>,
+}
+
+impl MeshId {
+    #[inline]
+    pub fn new(mesh: &Mesh) -> Self {
+        Self {
+            vertex: mesh.id(),
+            index: mesh.id(),
+        }
+    }
+}
+
 pub struct Ctx<'a> {
-    render_ctx: &'a RenderCtx,
-    meshes: &'a mut HashMap<Id<Mesh>, MeshInstance>,
+    render_ctx: &'a RenderCtx, 
+    meshes: &'a mut HashMap<MeshId, MeshInstance>,
 }
 
 impl<'a> Ctx<'a> {
     #[inline]
     pub fn render_mesh(&mut self, mesh: &Mesh, transform: Mat4) {
-        if let Some(instance) = self.meshes.get_mut(&mesh.id) {
-            if mesh.changed.swap(false, Ordering::SeqCst) {
+        let id = MeshId::new(mesh);
+
+        if let Some(instance) = self.meshes.get_mut(&id) {
+            let data = mesh.data();
+
+            if mesh.vertices.mutated() { 
                 let vertex_buffer =
                     self.render_ctx
                         .device
                         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: None,
-                            contents: cast_slice(&mesh.vertices),
+                            contents: cast_slice(&data.vertex_data), 
                             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
-                        });
+                        }); 
 
+                instance.vertex_buffer = vertex_buffer; 
+
+                mesh.vertices.reset_mutated();
+            }
+
+            if mesh.indices.mutated() {
                 let index_buffer =
                     self.render_ctx
                         .device
                         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: None,
-                            contents: cast_slice(&mesh.indices),
+                            contents: cast_slice(&data.index_data),
                             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDEX,
                         });
 
-                instance.vertex_buffer = vertex_buffer;
                 instance.index_buffer = index_buffer;
-                instance.index_count = mesh.indices.len() as u32;
+                instance.index_count = data.index_count; 
+
+                mesh.indices.reset_mutated();
             }
+
+            instance.instances.push(transform);
         } else {
+            let data = mesh.data();
+
             let vertex_buffer =
                 self.render_ctx
                     .device
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: None,
-                        contents: cast_slice(&mesh.vertices),
+                        contents: cast_slice(&data.vertex_data),
                         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
                     });
 
@@ -139,21 +93,22 @@ impl<'a> Ctx<'a> {
                     .device
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: None,
-                        contents: cast_slice(&mesh.indices),
+                        contents: cast_slice(&data.index_data),
                         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDEX,
                     });
 
             let instance = MeshInstance {
-                index_count: mesh.indices.len() as u32,
+                index_count: data.index_count,
                 vertex_buffer,
                 index_buffer,
                 instances: vec![transform],
                 instance_buffer: None,
             };
 
-            self.meshes.insert(mesh.id, instance);
+            self.meshes.insert(id, instance);
 
-            mesh.changed.store(false, Ordering::SeqCst);
+            mesh.vertices.reset_mutated();
+            mesh.indices.reset_mutated();
         }
     }
 }
@@ -172,7 +127,7 @@ pub struct RenderNode {
     uniforms_bind_group: Option<wgpu::BindGroup>,
     pipeline: Option<wgpu::RenderPipeline>,
     pipelines: HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>,
-    meshes: HashMap<Id<Mesh>, MeshInstance>,
+    meshes: HashMap<MeshId, MeshInstance>,
 }
 
 impl RenderNode {
@@ -492,13 +447,15 @@ impl RenderNode {
 impl PassNode<GameState> for RenderNode {
     #[inline]
     fn run<'a>(&'a mut self, ctx: &mut PassNodeCtx<'_, 'a>, state: &mut GameState) {
+        let height = state.config.graphics.d3_scale;
+
         let aspect = ctx.view.width as f32 / ctx.view.height as f32;
 
-        let width = (aspect * 256.0).floor() as u32;
+        let width = (aspect * height as f32).floor() as u32;
 
-        if self.width != width || self.height != 256 {
+        if self.width != width || self.height != height {
             self.width = width;
-            self.height = 256;
+            self.height = height;
 
             self.create_textures(ctx.render_ctx);
         }
@@ -604,7 +561,7 @@ impl PassNode<GameState> for RenderNode {
 
         render_pass.set_pipeline(self.pipeline.as_ref().unwrap());
 
-        for (_id, mesh) in &self.meshes {
+        for (_id, mesh) in &mut self.meshes {
             render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, mesh.instance_buffer.as_ref().unwrap().slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -612,6 +569,8 @@ impl PassNode<GameState> for RenderNode {
             render_pass.set_bind_group(0, self.uniforms_bind_group.as_ref().unwrap(), &[]);
 
             render_pass.draw_indexed(0..mesh.index_count, 0, 0..mesh.instances.len() as u32);
+
+            mesh.instances.clear();
         }
 
         drop(render_pass);

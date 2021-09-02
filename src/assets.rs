@@ -8,6 +8,7 @@ pub struct Assets {
     pub wheat_1: Texture,
     pub wheat_2: Texture,
     pub wheat_3: Texture,
+    pub pole: Texture,
 }
 
 impl Assets {
@@ -21,6 +22,7 @@ impl Assets {
             wheat_1: Texture::load("assets/plants/wheat_1.png")?,
             wheat_2: Texture::load("assets/plants/wheat_2.png")?,
             wheat_3: Texture::load("assets/plants/wheat_3.png")?,
+            pole: Texture::load("assets/structures/pole.png")?,
         })
     }
 }

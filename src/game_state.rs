@@ -14,7 +14,7 @@ use crate::{
     cloth::Cloth,
     config::Config,
     iso::{from_iso, to_iso},
-    render::{Ctx, Mesh, Vertex},
+    render::Ctx,
     tile::Tile,
 };
 
@@ -83,7 +83,7 @@ impl Render2d for GameState {
                     .create_view(&Default::default()),
                 // offset tile by 8 pixels so it lines up correctly
                 transform: Transform2d::from_translation(tile_pos + Vec2::new(0.0, -8.0)).matrix(),
-                depth: -(tile_pos.y + 8.0) * 0.01,
+                depth: -(tile_pos.y + 8.0) / 0.5f32.asin().tan(),
                 width: texture.width,
                 height: texture.height,
                 min: Vec2::ZERO,
@@ -102,7 +102,7 @@ impl Render2d for GameState {
 impl State for GameState {
     fn start(&mut self, ctx: &mut StartCtx) {
         ctx.window.maximized = true;
-        //ctx.window.cursor_visible = false;
+        ctx.window.cursor_visible = false;
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx) {
@@ -169,11 +169,13 @@ impl State for GameState {
             tile.update(ctx, &self.config);
         }
 
-        self.cloth.update(
-            ctx.delta_time,
-            Vec3::new(-1.25, 0.0, -1.25),
-            Vec2::new((self.time * 10.0).cos() - 1.0, (self.time * 10.0).sin() - 1.0),
-        );
+        if self.config.graphics.instance_cloth {
+            self.cloth.update(
+                ctx.delta_time,
+                Vec3::new(-1.25, 0.0, -1.25),
+                Vec2::new((self.time * 10.0).cos() - 1.0, (self.time * 10.0).sin() - 1.0),
+            ); 
+        }
     }
 
     #[inline]
@@ -186,9 +188,9 @@ impl GameState {
     pub fn load() -> ike::anyhow::Result<Self> {
         let mut tiles = HashMap::new();
 
-        for x in -1..=1 {
-            for y in -1..=1 {
-                tiles.insert(IVec2::new(x, y), Tile::Grass);
+        for x in -5..=5 {
+            for y in -5..=5 {
+                tiles.insert(IVec2::new(x, y), Tile::grass());
             }
         }
 
@@ -197,7 +199,7 @@ impl GameState {
         Ok(Self {
             assets: Assets::load()?,
             config: toml::from_str(&config)?,
-            cloth: Cloth::generate(20, 5),
+            cloth: Cloth::generate(15, 4),
             main_camera: OrthographicCamera::new(),
             tiles,
             time: 0.0,
@@ -208,12 +210,22 @@ impl GameState {
     #[inline]
     pub fn render(&mut self, ctx: &mut Ctx) {
         let mut transform = Transform3d::IDENTITY;
-        transform.rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_4);
+        transform.rotation = Quat::from_rotation_x(0.5f32.asin());
         transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_4);
 
-        let mut cloth_transform = Transform3d::from_xyz(0.0, 10.0, 0.0);
-        cloth_transform = &transform * cloth_transform; 
+        for (position, tile) in &self.tiles {
+            let d = position.x as f32 + position.y as f32;
 
-        ctx.render_mesh(&self.cloth.mesh, cloth_transform.matrix());
+            // calculate tile floating offset
+            let offset = (d * 2.0 + self.time * 0.5).sin() * 1.0;
+
+            let position = Vec3::new(
+                position.x as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
+                offset,
+                -position.y as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
+            );
+
+            tile.render_mesh(ctx, position, &transform, &self.cloth, &self.config);
+        }
     }
 }

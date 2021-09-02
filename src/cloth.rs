@@ -2,8 +2,6 @@ use std::collections::{BTreeSet, HashMap};
 
 use ike::prelude::*;
 
-use crate::render::{Mesh, Vertex};
-
 pub struct Node {
     pub position: Vec3,
     pub prev_position: Vec3,
@@ -20,10 +18,10 @@ impl Node {
         }
     }
 }
-
+ 
 #[derive(Default)]
 pub struct Cloth {
-    pub mesh: Mesh,
+    pub mesh: Mesh, 
     pub nodes: Vec<Node>,
     pub connections: HashMap<(usize, usize), f32>,
     pub flicker: BTreeSet<usize>,
@@ -34,32 +32,39 @@ impl Cloth {
     pub fn generate(width: usize, height: usize) -> Self {
         let mut cloth = Self::default();
 
+        let vertices = &mut *cloth.mesh.vertices;
+        let indices = &mut *cloth.mesh.indices;
+
         for y in 0..height {
             for x in 0..width {
-                let position = Vec3::new(-(x as f32), y as f32 - height as f32 / 2.0, 0.0);
+                let position = Vec3::new(
+                    -(x as f32) / std::f32::consts::SQRT_2,
+                    y as f32 - height as f32 / 2.0,
+                    -(x as f32) / std::f32::consts::SQRT_2,
+                );
                 let node = Node::new(position, x == 0);
 
                 if x == 1 {
                     cloth.flicker.insert(cloth.nodes.len());
                 }
 
-                cloth.mesh.vertices.push(Vertex {
+                vertices.push(Vertex {
                     position,
                     normal: -Vec3::Z,
                     uv: Vec2::ZERO,
-                    color: Color::RED,
+                    color: Color::rgb(247.0 / 255.0, 16.0 / 255.0, 16.0 / 255.0),
                 });
 
                 cloth.nodes.push(node);
 
                 if x < width - 1 && y < height - 1 {
-                    cloth.mesh.indices.push((y * width + x) as u32);
-                    cloth.mesh.indices.push((y * width + x + 1) as u32);
-                    cloth.mesh.indices.push(((y + 1) * width + x) as u32);
+                    indices.push((y * width + x) as u32);
+                    indices.push((y * width + x + 1) as u32);
+                    indices.push(((y + 1) * width + x) as u32);
 
-                    cloth.mesh.indices.push((y * width + x + 1) as u32);
-                    cloth.mesh.indices.push(((y + 1) * width + x + 1) as u32);
-                    cloth.mesh.indices.push(((y + 1) * width + x) as u32);
+                    indices.push((y * width + x + 1) as u32);
+                    indices.push(((y + 1) * width + x + 1) as u32);
+                    indices.push(((y + 1) * width + x) as u32);
                 }
 
                 if x < width - 1 {
@@ -75,8 +80,6 @@ impl Cloth {
                 }
             }
         }
-
-        cloth.mesh.mark_changed();
 
         cloth
     }
@@ -101,7 +104,7 @@ impl Cloth {
             }
         }
 
-        for _ in 0..32 {
+        for _ in 0..12 {
             for ((a, b), length) in &self.connections {
                 let center = (self.nodes[*a].position + self.nodes[*b].position) / 2.0;
                 let dir = (self.nodes[*a].position - self.nodes[*b].position).normalize();
@@ -116,12 +119,12 @@ impl Cloth {
             }
         }
 
+        let vertices = &mut *self.mesh.vertices;
+
         for (i, node) in self.nodes.iter().enumerate() {
-            self.mesh.vertices[i].position = node.position * 2.0;
+            vertices[i].position = node.position * 2.0;
         }
-
+ 
         self.mesh.calculate_normals();
-
-        self.mesh.mark_changed();
     }
 }

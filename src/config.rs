@@ -30,8 +30,17 @@ pub struct Wheat {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Graphics {
+    pub d3_scale: u32,
+    pub instance_cloth: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Config {
     pub controls: Controls,
+    pub graphics: Graphics,
     pub tile: Tile,
     pub plants: Plants,
 }

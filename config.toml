@@ -5,8 +5,12 @@ left = "Left"
 right = "Right"
 move-speed = 64.0
 
+[graphics]
+d3-scale = 256 
+instance-cloth = false
+
 [tile]
 grass-growth-time = 60.0
-
+ 
 [plants.wheat]
-growth-time = 10.0
+growth-time = 10.0 

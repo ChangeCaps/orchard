@@ -49,7 +49,7 @@ struct FragmentInput {
 
 [[stage(fragment)]]
 fn main(in: FragmentInput) -> [[location(0)]] vec4<f32> {
-	let light_dir = normalize(vec3<f32>(1.0, 1.0, 1.0));
+	let light_dir = normalize(vec3<f32>(1.0, 2.0, 1.0));
 
 	var normal: vec3<f32>;
 
@@ -64,7 +64,7 @@ fn main(in: FragmentInput) -> [[location(0)]] vec4<f32> {
 	if (dot(light_dir, in.normal) > .0) {
 		diffuse = 1.0;
 	} else {
-		diffuse = 0.5;
+		diffuse = 0.7;
 	}
 
 	return vec4<f32>(in.color.rgb * diffuse, in.color.a);

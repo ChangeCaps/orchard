@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use bytemuck::{bytes_of, cast_slice};
+use ike::d3::mesh::{Indices, Vertices};
 pub use ike::prelude::*;
 use ike::wgpu::util::DeviceExt;
-use ike::d3::mesh::{Vertices, Indices};
 
 use crate::game_state::GameState;
 
@@ -32,7 +32,7 @@ impl MeshId {
 }
 
 pub struct Ctx<'a> {
-    render_ctx: &'a RenderCtx, 
+    render_ctx: &'a RenderCtx,
     meshes: &'a mut HashMap<MeshId, MeshInstance>,
 }
 
@@ -44,17 +44,17 @@ impl<'a> Ctx<'a> {
         if let Some(instance) = self.meshes.get_mut(&id) {
             let data = mesh.data();
 
-            if mesh.vertices.mutated() { 
+            if mesh.vertices.mutated() {
                 let vertex_buffer =
                     self.render_ctx
                         .device
                         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: None,
-                            contents: cast_slice(&data.vertex_data), 
+                            contents: cast_slice(&data.vertex_data),
                             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
-                        }); 
+                        });
 
-                instance.vertex_buffer = vertex_buffer; 
+                instance.vertex_buffer = vertex_buffer;
 
                 mesh.vertices.reset_mutated();
             }
@@ -70,7 +70,7 @@ impl<'a> Ctx<'a> {
                         });
 
                 instance.index_buffer = index_buffer;
-                instance.index_count = data.index_count; 
+                instance.index_count = data.index_count;
 
                 mesh.indices.reset_mutated();
             }

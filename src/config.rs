@@ -8,7 +8,8 @@ pub struct Controls {
     pub down: Key,
     pub left: Key,
     pub right: Key,
-    pub move_speed: f32,
+    pub camera_speed: f32,
+    pub item_offset: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -32,6 +33,7 @@ pub struct Wheat {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Graphics {
+    pub always_show_stack_size: bool,
     pub d3_scale: u32,
     pub instance_cloth: bool,
 }

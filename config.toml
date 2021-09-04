@@ -3,11 +3,13 @@ up = "Up"
 down = "Down"
 left = "Left"
 right = "Right"
-move-speed = 64.0
+camera-speed = 64.0
+item-offset = false
 
 [graphics]
+always-show-stack-size = false
 d3-scale = 256 
-instance-cloth = false
+instance-cloth = true
 
 [tile]
 grass-growth-time = 60.0

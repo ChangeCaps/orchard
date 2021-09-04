@@ -14,6 +14,7 @@ use crate::{
     cloth::Cloth,
     config::Config,
     iso::{from_iso, to_iso},
+    item::Items,
     render::Ctx,
     tile::Tile,
 };
@@ -51,6 +52,7 @@ pub struct GameState {
     pub config: Config,
     pub cloth: Cloth,
     pub main_camera: OrthographicCamera,
+    pub items: Items,
     pub tiles: HashMap<IVec2, Tile>,
     pub time: f32,
     pub mouse_position: Vec2,
@@ -58,6 +60,8 @@ pub struct GameState {
 
 impl Render2d for GameState {
     fn render(&mut self, ctx: &mut Render2dCtx) {
+        self.items.render(ctx, &mut self.assets, &self.config);
+
         ctx.draw_texture_depth(
             &mut self.assets.cursor,
             &Transform2d::from_translation(self.mouse_position),
@@ -84,11 +88,11 @@ impl Render2d for GameState {
                 // offset tile by 8 pixels so it lines up correctly
                 transform: Transform2d::from_translation(tile_pos + Vec2::new(0.0, -8.0)).matrix(),
                 depth: -(tile_pos.y + 8.0) / 0.5f32.asin().tan(),
-                width: texture.width,
-                height: texture.height,
+                width: texture.width() as f32,
+                height: texture.height() as f32,
                 min: Vec2::ZERO,
                 max: Vec2::ONE,
-                texture_id: texture.id,
+                texture_id: texture.id(),
             };
 
             ctx.draw_sprite(sprite);
@@ -133,7 +137,7 @@ impl State for GameState {
 
         if camera_movement != Vec2::ZERO {
             self.main_camera.transform.translation +=
-                camera_movement.normalize() * ctx.delta_time * self.config.controls.move_speed;
+                camera_movement.normalize() * ctx.delta_time * self.config.controls.camera_speed;
         }
 
         // move camera by mouse
@@ -163,18 +167,31 @@ impl State for GameState {
                 && mouse.y > position.y as f32 - 0.5
                 && mouse.y < position.y as f32 + 0.5
             {
-                tile.hovered(ctx, &self.config);
+                let position = from_iso(position.as_f32(), Vec2::splat(40.0));
+
+                tile.hovered(ctx, &self.config, position, &mut self.items);
             }
 
             tile.update(ctx, &self.config);
         }
 
+        self.items.update(
+            ctx,
+            &self.tiles,
+            self.mouse_position,
+            self.time,
+            &self.config,
+        );
+
         if self.config.graphics.instance_cloth {
             self.cloth.update(
                 ctx.delta_time,
                 Vec3::new(-1.25, 0.0, -1.25),
-                Vec2::new((self.time * 10.0).cos() - 1.0, (self.time * 10.0).sin() - 1.0),
-            ); 
+                Vec2::new(
+                    (self.time * 10.0).cos() - 1.0,
+                    (self.time * 10.0).sin() - 1.0,
+                ),
+            );
         }
     }
 
@@ -188,8 +205,8 @@ impl GameState {
     pub fn load() -> ike::anyhow::Result<Self> {
         let mut tiles = HashMap::new();
 
-        for x in -5..=5 {
-            for y in -5..=5 {
+        for x in -1..=1 {
+            for y in -1..=1 {
                 tiles.insert(IVec2::new(x, y), Tile::grass());
             }
         }
@@ -201,6 +218,7 @@ impl GameState {
             config: toml::from_str(&config)?,
             cloth: Cloth::generate(15, 4),
             main_camera: OrthographicCamera::new(),
+            items: Default::default(),
             tiles,
             time: 0.0,
             mouse_position: Default::default(),

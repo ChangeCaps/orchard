@@ -18,10 +18,10 @@ impl Node {
         }
     }
 }
- 
+
 #[derive(Default)]
 pub struct Cloth {
-    pub mesh: Mesh, 
+    pub mesh: Mesh,
     pub nodes: Vec<Node>,
     pub connections: HashMap<(usize, usize), f32>,
     pub flicker: BTreeSet<usize>,
@@ -124,7 +124,7 @@ impl Cloth {
         for (i, node) in self.nodes.iter().enumerate() {
             vertices[i].position = node.position * 2.0;
         }
- 
+
         self.mesh.calculate_normals();
     }
 }

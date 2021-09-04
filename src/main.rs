@@ -5,6 +5,7 @@ mod cloth;
 mod config;
 mod game_state;
 mod iso;
+mod item;
 mod render;
 mod tile;
 

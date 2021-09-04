@@ -4,7 +4,14 @@ use ike::{
 };
 use rand::Rng;
 
-use crate::{assets::Assets, cloth::Cloth, config::Config, iso::from_iso, render::Ctx};
+use crate::{
+    assets::Assets,
+    cloth::Cloth,
+    config::Config,
+    iso::from_iso,
+    item::{ItemType, Items},
+    render::Ctx,
+};
 
 #[derive(Debug)]
 pub enum FarmPlant {
@@ -42,14 +49,29 @@ impl FarmPlant {
 }
 
 pub enum Structure {
-    Pole { cloth: Cloth, frames: u8, time: f32},
+    Pole { cloth: Cloth, frames: u8, time: f32 },
 }
 
 impl Structure {
     #[inline]
+    pub fn pole() -> Self {
+        let mut rng = rand::thread_rng();
+
+        Structure::Pole {
+            cloth: Cloth::generate(15, 4),
+            frames: 0,
+            time: rng.gen_range(0.0..std::f32::consts::PI),
+        }
+    }
+
+    #[inline]
     pub fn update(&mut self, ctx: &mut UpdateCtx, cfg: &Config) {
         match self {
-            Structure::Pole { cloth, frames, time } => {
+            Structure::Pole {
+                cloth,
+                frames,
+                time,
+            } => {
                 if cfg.graphics.instance_cloth {
                     return;
                 }
@@ -110,15 +132,7 @@ pub enum Tile {
 impl Tile {
     #[inline]
     pub fn grass() -> Self {
-        let mut rng = rand::thread_rng();
-
-        Self::Grass {
-            structure: Some(Structure::Pole {
-                cloth: Cloth::generate(15, 4),
-                frames: 0,
-                time: rng.gen_range(0.0..std::f32::consts::PI),
-            }),
-        }
+        Self::Grass { structure: None }
     }
 
     #[inline]
@@ -152,15 +166,15 @@ impl Tile {
                                 .texture(ctx.render_ctx)
                                 .create_view(&Default::default()),
                             transform: Transform2d::from_translation(
-                                pos + Vec2::new(0.0, texture.height as f32 / 2.0),
+                                pos + Vec2::new(0.0, texture.height() as f32 / 2.0),
                             )
                             .matrix(),
-                            depth: -(pos.y - 5.0) / 0.5f32.asin().tan(),
-                            width: texture.width,
-                            height: texture.height,
+                            depth: -(pos.y - texture.height() as f32 / 4.0) / 0.5f32.asin().tan(),
+                            width: texture.width() as f32,
+                            height: texture.height() as f32,
                             min: Vec2::ZERO,
                             max: Vec2::ONE,
-                            texture_id: texture.id,
+                            texture_id: texture.id(),
                         };
 
                         ctx.draw_sprite(sprite);
@@ -180,11 +194,11 @@ impl Tile {
                     transform: Transform2d::from_translation(tile_pos + Vec2::new(0.0, 14.0))
                         .matrix(),
                     depth: -(tile_pos.y - 14.0) / 0.5f32.asin().tan(),
-                    width: texture.width,
-                    height: texture.height,
+                    width: texture.width() as f32,
+                    height: texture.height() as f32,
                     min: Vec2::ZERO,
                     max: Vec2::ONE,
-                    texture_id: texture.id,
+                    texture_id: texture.id(),
                 };
 
                 ctx.draw_sprite(sprite);
@@ -214,10 +228,24 @@ impl Tile {
     }
 
     #[inline]
-    pub fn hovered(&mut self, ctx: &mut UpdateCtx, cfg: &Config) {
+    pub fn hovered(
+        &mut self,
+        ctx: &mut UpdateCtx,
+        cfg: &Config,
+        position: Vec2,
+        items: &mut Items,
+    ) {
         match self {
-            Self::Grass { .. } => {
-                if ctx.mouse_input.down(&MouseButton::Right) {
+            Self::Grass {
+                structure: None, ..
+            } => {
+                if ctx.mouse_input.down(&MouseButton::Right) && items.drag.is_some() {
+                    let mut rng = rand::thread_rng();
+
+                    if rng.gen_range(0..3) == 0 {
+                        items.spawn(ItemType::WheatSeed, position, 1);
+                    }
+
                     *self = Self::Farmed {
                         time: cfg.tile.grass_growth_time,
                         plant: None,
@@ -226,18 +254,31 @@ impl Tile {
             }
             Self::Farmed { plant, time, .. } => {
                 if let Some(farm_plant) = plant {
-                    if farm_plant.harvestable() {
+                    if farm_plant.harvestable() && items.drag.is_some() {
                         if ctx.mouse_input.down(&MouseButton::Right) {
                             *time = cfg.tile.grass_growth_time;
                             *plant = None;
+
+                            let mut rng = rand::thread_rng();
+
+                            items.spawn(
+                                ItemType::WheatSeed,
+                                position + Vec2::new(-4.0, -2.0),
+                                1 + rng.gen_range(0..=3) / 3, 
+                            );
+                            items.spawn(ItemType::Wheat, position + Vec2::new(4.0, 2.0), 1);
                         }
                     }
                 } else {
-                    if ctx.mouse_input.down(&MouseButton::Left) {
-                        *plant = Some(FarmPlant::Wheat { growth: 0.0 });
+                    if let Some(&ItemType::WheatSeed) = items.drag_ty() {
+                        if ctx.mouse_input.down(&MouseButton::Right) {
+                            *plant = Some(FarmPlant::Wheat { growth: 0.0 });
+                            items.consume();
+                        }
                     }
                 }
             }
+            _ => {}
         }
     }
 

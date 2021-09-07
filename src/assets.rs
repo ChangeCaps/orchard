@@ -12,6 +12,9 @@ pub struct Assets {
     pub wheat_2: Texture,
     pub wheat_3: Texture,
     pub pole: Texture,
+    pub pole_item: Texture,
+    pub wood_item: Texture,
+    pub sapling_item: Texture,
 }
 
 impl Assets {
@@ -29,6 +32,9 @@ impl Assets {
             wheat_2: Texture::load("assets/plants/wheat_2.png")?,
             wheat_3: Texture::load("assets/plants/wheat_3.png")?,
             pole: Texture::load("assets/structures/pole.png")?,
+            pole_item: Texture::load("assets/items/pole_item.png")?,
+            wood_item: Texture::load("assets/items/wood_item.png")?,
+            sapling_item: Texture::load("assets/items/sapling_item.png")?,
         })
     }
 }

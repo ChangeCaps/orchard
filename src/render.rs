@@ -1,15 +1,17 @@
 use std::collections::HashMap;
 
 use bytemuck::{bytes_of, cast_slice};
-use ike::d3::mesh::{Indices, Vertices};
-pub use ike::prelude::*;
+use ike::d3::*;
+use ike::prelude::*;
 use ike::wgpu::util::DeviceExt;
 
 use crate::game_state::GameState;
 
 struct MeshInstance {
     index_count: u32,
+    vertex_version: BufferVersion,
     vertex_buffer: wgpu::Buffer,
+    index_version: BufferVersion,
     index_buffer: wgpu::Buffer,
     instances: Vec<Mat4>,
     instance_buffer: Option<wgpu::Buffer>,
@@ -44,7 +46,7 @@ impl<'a> Ctx<'a> {
         if let Some(instance) = self.meshes.get_mut(&id) {
             let data = mesh.data();
 
-            if mesh.vertices.mutated() {
+            if mesh.vertices.changed(instance.vertex_version) {
                 let vertex_buffer =
                     self.render_ctx
                         .device
@@ -56,10 +58,10 @@ impl<'a> Ctx<'a> {
 
                 instance.vertex_buffer = vertex_buffer;
 
-                mesh.vertices.reset_mutated();
+                instance.vertex_version = mesh.vertices.version();
             }
 
-            if mesh.indices.mutated() {
+            if mesh.indices.changed(instance.index_version) {
                 let index_buffer =
                     self.render_ctx
                         .device
@@ -72,7 +74,7 @@ impl<'a> Ctx<'a> {
                 instance.index_buffer = index_buffer;
                 instance.index_count = data.index_count;
 
-                mesh.indices.reset_mutated();
+                instance.index_version = mesh.indices.version();
             }
 
             instance.instances.push(transform);
@@ -99,16 +101,15 @@ impl<'a> Ctx<'a> {
 
             let instance = MeshInstance {
                 index_count: data.index_count,
+                vertex_version: mesh.vertices.version(),
                 vertex_buffer,
+                index_version: mesh.indices.version(),
                 index_buffer,
                 instances: vec![transform],
                 instance_buffer: None,
             };
 
             self.meshes.insert(id, instance);
-
-            mesh.vertices.reset_mutated();
-            mesh.indices.reset_mutated();
         }
     }
 }

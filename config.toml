@@ -1,18 +1,52 @@
 [controls]
+# controls for moving the camera
 up = "Up"
 down = "Down"
 left = "Left"
 right = "Right"
+
+toggle-fullscreen = "F"
+
+# mouse button used for moving items.. etc.
+primary = "Left"
+# mouse button used for planting, harvesting.. etc.
+secondary = "Right"
+
+# camera speed when using above keys
 camera-speed = 64.0
+
+# keep held item at the same offset as when picked up
 item-offset = false
 
+[window]
+# grab cursor when fullscreen
+cursor-grab = false
+
+# start the game maximized
+maximized-default = false
+
+# start the game in fullscreen
+fullscreen-default = false
+
 [graphics]
+# use games custom cursor
+custom-cursor = true
+
+# always show number of items in an item stack
 always-show-stack-size = false
-d3-scale = 256 
+
+# scale of the 3d pass texture
+d3-scale = 256
+
+# only simulate one piece of cloth for each type and instance that where needed
+# same types of cloth will look identical but better for performance
 instance-cloth = true
 
 [tile]
-grass-growth-time = 60.0
+# time it takes grass to grow back
+grass-growth-time = 30.0
  
 [plants.wheat]
+# time it takes wheat to grow each stage
 growth-time = 10.0 
+growth-variance = 0.075

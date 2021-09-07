@@ -8,6 +8,7 @@ mod iso;
 mod item;
 mod render;
 mod tile;
+mod tree;
 
 use game_state::GameState;
 use ike::{d2::render::SpriteNode2d, prelude::*};
@@ -25,8 +26,8 @@ fn main() {
 
     let mut main_pass = app.renderer.pass_mut::<MainPass>().unwrap();
 
-    main_pass.push(SpriteNode2d::new());
     main_pass.push(RenderNode::default());
+    main_pass.push(SpriteNode2d::new());
     main_pass.clear_color = CLEAR_COLOR;
     main_pass.sample_count = 4;
 

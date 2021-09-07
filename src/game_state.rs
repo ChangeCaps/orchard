@@ -62,11 +62,13 @@ impl Render2d for GameState {
     fn render(&mut self, ctx: &mut Render2dCtx) {
         self.items.render(ctx, &mut self.assets, &self.config);
 
-        ctx.draw_texture_depth(
-            &mut self.assets.cursor,
-            &Transform2d::from_translation(self.mouse_position),
-            500.0,
-        );
+        if self.config.graphics.custom_cursor {
+            ctx.draw_texture_depth(
+                &mut self.assets.cursor,
+                &Transform2d::from_translation(self.mouse_position),
+                500.0,
+            );
+        }
 
         // draw tiles
         for (position, tile) in &self.tiles {
@@ -105,8 +107,10 @@ impl Render2d for GameState {
 
 impl State for GameState {
     fn start(&mut self, ctx: &mut StartCtx) {
-        ctx.window.maximized = true;
-        ctx.window.cursor_visible = false;
+        ctx.window.maximized = self.config.window.maximized_default;
+        ctx.window.cursor_visible = !self.config.graphics.custom_cursor;
+        ctx.window.fullscreen = self.config.window.fullscreen_default;
+        ctx.window.title = String::from("Orchard");
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx) {
@@ -115,6 +119,14 @@ impl State for GameState {
 
         // advance time
         self.time += ctx.delta_time;
+
+        if ctx.key_input.pressed(&self.config.controls.toggle_fullscreen) {
+            ctx.window.fullscreen = !ctx.window.fullscreen;
+
+            if self.config.window.cursor_grab {
+                ctx.window.cursor_grab = ctx.window.fullscreen;
+            }
+        }
 
         // move camera with keys
         let mut camera_movement = Vec2::ZERO;
@@ -172,7 +184,7 @@ impl State for GameState {
                 tile.hovered(ctx, &self.config, position, &mut self.items);
             }
 
-            tile.update(ctx, &self.config);
+            tile.update(ctx, &mut self.items, &self.config);
         }
 
         self.items.update(
@@ -207,7 +219,7 @@ impl GameState {
 
         for x in -1..=1 {
             for y in -1..=1 {
-                tiles.insert(IVec2::new(x, y), Tile::grass());
+                tiles.insert(IVec2::new(x, y), Tile::grass_plain());
             }
         }
 

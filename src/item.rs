@@ -11,13 +11,19 @@ use crate::{assets::Assets, config::Config, iso::to_iso, tile::Tile};
 pub enum ItemType {
     WheatSeed,
     Wheat,
+    Pole,
+    Wood,
+    Sapling,
 }
 
 impl ItemType {
-    pub fn texture<'a>(&self, assets: &'a mut Assets) -> &'a mut Texture {
+    pub fn texture<'a>(&self, assets: &'a Assets) -> &'a Texture {
         match self {
-            Self::WheatSeed => &mut assets.wheat_seed,
-            Self::Wheat => &mut assets.wheat_item,
+            Self::WheatSeed => &assets.wheat_seed,
+            Self::Wheat => &assets.wheat_item,
+            Self::Pole => &assets.pole_item,
+            Self::Wood => &assets.wood_item,
+            Self::Sapling => &assets.sapling_item,
         }
     }
 }
@@ -46,9 +52,9 @@ impl Items {
         let id = Id::new();
 
         let item = Item {
-            position: (position - Vec2::Y * 4.0).extend(0.0),
+            position: (position - Vec2::Y * 4.0).extend(8.0),
             ty,
-            velocity: Vec3::ZERO,
+            velocity: Vec3::Z * -32.0,
             count,
         };
 
@@ -87,9 +93,9 @@ impl Items {
         tiles: &HashMap<IVec2, Tile>,
         mouse: Vec2,
         time: f32,
-        config: &Config,
+        cfg: &Config,
     ) {
-        if !ctx.mouse_input.down(&MouseButton::Left) {
+        if !ctx.mouse_input.down(&cfg.controls.primary) {
             self.drag = None;
         }
 
@@ -100,16 +106,18 @@ impl Items {
                 .round()
                 .as_i32();
 
+            item.velocity.z -= 64.0 * ctx.delta_time;
+
             if tiles.contains_key(&iso) {
                 let d = iso.x as f32 + iso.y as f32;
 
                 let offset = (d * 2.0 + time * 0.5).sin();
 
-                item.position.z = offset;
-                item.velocity.z = item.velocity.z.max(0.0);
+                if item.position.z <= offset {
+                    item.position.z = offset;
+                    item.velocity.z *= -0.1;
+                }
             } else {
-                item.velocity.z -= 32.0 * ctx.delta_time;
-
                 if item.velocity.z < -512.0 {
                     despawn.push(*id);
                 }
@@ -151,11 +159,11 @@ impl Items {
                     && mouse.x <= item.position.x + 8.0
                     && mouse.y >= item.position.y + item.position.z
                     && mouse.y <= item.position.y + 16.0 + item.position.z
-                    && ctx.mouse_input.pressed(&MouseButton::Left)
+                    && ctx.mouse_input.pressed(&cfg.controls.primary)
                 {
                     item.velocity.z = item.velocity.z.max(0.0);
 
-                    let offset = if config.controls.item_offset {
+                    let offset = if cfg.controls.item_offset {
                         item.position.truncate() - mouse
                     } else {
                         Vec2::Y * -8.0
@@ -183,18 +191,15 @@ impl Items {
             }
 
             let texture = item.ty.texture(assets);
-            
+
             let position = item.position.truncate() + Vec2::Y * item.position.z;
 
             let sprite = Sprite {
                 view: texture
                     .texture(ctx.render_ctx)
                     .create_view(&Default::default()),
-                transform: Transform2d::from_translation(
-                    position + Vec2::Y * 8.0,
-                )
-                .matrix(),
-                depth: -position.y / 0.5f32.asin().tan(),
+                transform: Transform2d::from_translation(position + Vec2::Y * 8.0).matrix(),
+                depth: -item.position.y / 0.5f32.asin().tan(),
                 width: texture.width() as f32,
                 height: texture.height() as f32,
                 min: Vec2::ZERO,

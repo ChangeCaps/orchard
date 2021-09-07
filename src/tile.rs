@@ -1,17 +1,15 @@
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
+
 use ike::{
     d2::{render::Render2dCtx, sprite::Sprite, transform2d::Transform2d},
     prelude::*,
 };
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 
-use crate::{
-    assets::Assets,
-    cloth::Cloth,
-    config::Config,
-    iso::from_iso,
-    item::{ItemType, Items},
-    render::Ctx,
-};
+use crate::{assets::Assets, cloth::Cloth, config::Config, iso::from_iso, item::{ItemType, Items}, render::Ctx, tree::{Tree, TreeStage}};
 
 #[derive(Debug)]
 pub enum FarmPlant {
@@ -20,15 +18,19 @@ pub enum FarmPlant {
 
 impl FarmPlant {
     #[inline]
-    pub fn texture<'a>(&self, assets: &'a mut Assets, _p: u64) -> &'a mut Texture {
+    pub fn texture<'a>(&self, assets: &'a mut Assets, cfg: &Config, p: u64) -> &'a mut Texture {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(p);
+
         match self {
-            FarmPlant::Wheat { growth, .. } => match *growth {
-                x if x < 1.0 => &mut assets.wheat_0,
-                x if x < 2.0 => &mut assets.wheat_1,
-                x if x < 3.0 => &mut assets.wheat_2,
-                _ => &mut assets.wheat_3,
-            },
-        }
+            FarmPlant::Wheat { growth, .. } => {
+                match *growth + rng.gen_range(0.0..cfg.plants.wheat.growth_variance) {
+                    x if x < 1.0 => &mut assets.wheat_0,
+                    x if x < 2.0 => &mut assets.wheat_1,
+                    x if x < 3.0 => &mut assets.wheat_2,
+                    _ => &mut assets.wheat_3,
+                }
+            }
+        } 
     }
 
     #[inline]
@@ -50,6 +52,7 @@ impl FarmPlant {
 
 pub enum Structure {
     Pole { cloth: Cloth, frames: u8, time: f32 },
+    Tree(Tree),
 }
 
 impl Structure {
@@ -65,7 +68,22 @@ impl Structure {
     }
 
     #[inline]
+    pub fn tree() -> Self {
+        let mut tree = Tree::default();
+        tree.trunk_color = Color8::srgb(180, 105, 43).into();
+        tree.leaf_color = Color8::srgb(76, 193, 59).into();
+        tree.trunk_radius = 4.0;
+        tree.radius_decay = 0.8;
+        tree.branch_length = 8.0;
+
+        tree.generate_mesh_sapling();
+
+        Structure::Tree(tree)
+    }
+
+    #[inline]
     pub fn update(&mut self, ctx: &mut UpdateCtx, cfg: &Config) {
+        #[allow(unreachable_patterns)]
         match self {
             Structure::Pole {
                 cloth,
@@ -90,13 +108,35 @@ impl Structure {
                     );
                 }
             }
+            Structure::Tree(tree) => tree.update(ctx),
+            _ => {}
+        }
+    }
+    
+    #[inline]
+    pub fn destroy(self, position: Vec2, _ctx: &mut UpdateCtx, items: &mut Items, _cfg: &Config) {
+        #[allow(unreachable_patterns)]
+        match self {
+            Self::Pole { .. } => {
+                items.spawn(ItemType::Pole, position, 1);
+            },
+            Self::Tree(tree) => {
+                if let TreeStage::Grown = tree.stage {
+                    items.spawn(ItemType::Wood, position + Vec2::new(-4.0, -2.0), 1);
+                    items.spawn(ItemType::Sapling, position + Vec2::new(4.0, 2.0), 1);
+                } else {
+                    items.spawn(ItemType::Sapling, position, 1);
+                }
+            }
+            _ => {},
         }
     }
 
     #[inline]
-    pub fn texture<'a>(&self, assets: &'a mut Assets) -> &'a mut Texture {
+    pub fn texture<'a>(&self, assets: &'a mut Assets) -> Option<&'a mut Texture> {
         match self {
-            Self::Pole { .. } => &mut assets.pole,
+            Self::Pole { .. } => Some(&mut assets.pole),
+            _ => None,
         }
     }
 
@@ -120,19 +160,38 @@ impl Structure {
                     ctx.render_mesh(&cloth.mesh, transform.matrix());
                 }
             }
+            Self::Tree(tree) => {
+                let transform =
+                    transform * Transform3d::from_translation(position + Vec3::new(0.0, 0.0, 0.0));
+
+                ctx.render_mesh(&tree.mesh, transform.matrix());
+            }
         }
     }
 }
 
 pub enum Tile {
-    Grass { structure: Option<Structure> },
+    Grass { structure: Option<Structure>, destruction: f32, },
     Farmed { time: f32, plant: Option<FarmPlant> },
 }
 
 impl Tile {
     #[inline]
+    pub fn grass_plain() -> Self {
+        Self::Grass { structure: None, destruction: 0.0 }
+    }
+
+    #[inline]
     pub fn grass() -> Self {
-        Self::Grass { structure: None }
+        let mut rng = rand::thread_rng();
+
+        let structure = match rng.gen_range(0..100) {
+            0 => Some(Structure::pole()),
+            1..=5 => Some(Structure::tree()),
+            _ => None,
+        };
+
+        Self::Grass { structure, destruction: 0.0 }
     }
 
     #[inline]
@@ -144,7 +203,7 @@ impl Tile {
     }
 
     #[inline]
-    pub fn draw(&self, ctx: &mut Render2dCtx, tile_pos: Vec2, assets: &mut Assets, _cfg: &Config) {
+    pub fn draw(&self, ctx: &mut Render2dCtx, tile_pos: Vec2, assets: &mut Assets, cfg: &Config) {
         match self {
             Self::Farmed {
                 plant: Some(plant), ..
@@ -159,7 +218,15 @@ impl Tile {
                         let pos = plant_pos + tile_pos;
 
                         // generate plant texture hash
-                        let texture = plant.texture(assets, 0);
+                        let p = tile_pos.round().as_i32() + IVec2::new(y, x);
+
+                        let mut hasher = DefaultHasher::default();
+
+                        p.hash(&mut hasher);
+
+                        let p = hasher.finish();
+
+                        let texture = plant.texture(assets, cfg, p);
 
                         let sprite = Sprite {
                             view: texture
@@ -169,7 +236,7 @@ impl Tile {
                                 pos + Vec2::new(0.0, texture.height() as f32 / 2.0),
                             )
                             .matrix(),
-                            depth: -(pos.y - texture.height() as f32 / 4.0) / 0.5f32.asin().tan(),
+                            depth: -pos.y / 0.5f32.asin().tan(),
                             width: texture.width() as f32,
                             height: texture.height() as f32,
                             min: Vec2::ZERO,
@@ -187,21 +254,23 @@ impl Tile {
             } => {
                 let texture = structure.texture(assets);
 
-                let sprite = Sprite {
-                    view: texture
-                        .texture(ctx.render_ctx)
-                        .create_view(&Default::default()),
-                    transform: Transform2d::from_translation(tile_pos + Vec2::new(0.0, 14.0))
-                        .matrix(),
-                    depth: -(tile_pos.y - 14.0) / 0.5f32.asin().tan(),
-                    width: texture.width() as f32,
-                    height: texture.height() as f32,
-                    min: Vec2::ZERO,
-                    max: Vec2::ONE,
-                    texture_id: texture.id(),
-                };
+                if let Some(texture) = texture {
+                    let sprite = Sprite {
+                        view: texture
+                            .texture(ctx.render_ctx)
+                            .create_view(&Default::default()),
+                        transform: Transform2d::from_translation(tile_pos + Vec2::new(0.0, 14.0))
+                            .matrix(),
+                        depth: -(tile_pos.y - 2.0) / 0.5f32.asin().tan(),
+                        width: texture.width() as f32,
+                        height: texture.height() as f32,
+                        min: Vec2::ZERO,
+                        max: Vec2::ONE,
+                        texture_id: texture.id(),
+                    };
 
-                ctx.draw_sprite(sprite);
+                    ctx.draw_sprite(sprite);
+                }
             }
             _ => {}
         }
@@ -237,25 +306,48 @@ impl Tile {
     ) {
         match self {
             Self::Grass {
-                structure: None, ..
-            } => {
-                if ctx.mouse_input.down(&MouseButton::Right) && items.drag.is_some() {
-                    let mut rng = rand::thread_rng();
+                structure, ..
+            } if structure.is_none() => {
+                if ctx.mouse_input.down(&cfg.controls.secondary) {
+                    match items.drag_ty() {
+                        None => {
+                            let mut rng = rand::thread_rng();
 
-                    if rng.gen_range(0..3) == 0 {
-                        items.spawn(ItemType::WheatSeed, position, 1);
+                            if rng.gen_range(0..5) == 0 {
+                                items.spawn(ItemType::WheatSeed, position, 1);
+                            }
+
+                            *self = Self::Farmed {
+                                time: cfg.tile.grass_growth_time,
+                                plant: None,
+                            };
+                        }
+                        Some(ItemType::Pole) => {
+                            items.consume();
+                            *structure = Some(Structure::pole()); 
+                        }
+                        Some(ItemType::Sapling) => {
+                            items.consume();
+                            *structure = Some(Structure::tree());
+                        }
+                        _ => {}
                     }
+                }
+            }
+            Self::Grass { structure, destruction } => {
+                if ctx.mouse_input.pressed(&cfg.controls.secondary) {
+                    *destruction += 1.0;
+                }
 
-                    *self = Self::Farmed {
-                        time: cfg.tile.grass_growth_time,
-                        plant: None,
-                    };
+                if *destruction > 3.0 && ctx.mouse_input.released(&cfg.controls.secondary) {
+                    *destruction = 0.0;
+                    structure.take().unwrap().destroy(position, ctx, items, cfg);
                 }
             }
             Self::Farmed { plant, time, .. } => {
                 if let Some(farm_plant) = plant {
-                    if farm_plant.harvestable() && items.drag.is_some() {
-                        if ctx.mouse_input.down(&MouseButton::Right) {
+                    if farm_plant.harvestable() && items.drag.is_none() {
+                        if ctx.mouse_input.down(&cfg.controls.secondary) {
                             *time = cfg.tile.grass_growth_time;
                             *plant = None;
 
@@ -264,14 +356,14 @@ impl Tile {
                             items.spawn(
                                 ItemType::WheatSeed,
                                 position + Vec2::new(-4.0, -2.0),
-                                1 + rng.gen_range(0..=3) / 3, 
+                                1 + rng.gen_range(0..=8) / 8,
                             );
                             items.spawn(ItemType::Wheat, position + Vec2::new(4.0, 2.0), 1);
                         }
                     }
                 } else {
                     if let Some(&ItemType::WheatSeed) = items.drag_ty() {
-                        if ctx.mouse_input.down(&MouseButton::Right) {
+                        if ctx.mouse_input.down(&cfg.controls.secondary) {
                             *plant = Some(FarmPlant::Wheat { growth: 0.0 });
                             items.consume();
                         }
@@ -283,11 +375,13 @@ impl Tile {
     }
 
     #[inline]
-    pub fn update(&mut self, ctx: &mut UpdateCtx, cfg: &Config) {
+    pub fn update(&mut self, ctx: &mut UpdateCtx, items: &mut Items, cfg: &Config) {
         match self {
-            Self::Grass { structure } => {
-                if let Some(structure) = structure {
-                    structure.update(ctx, cfg);
+            Self::Grass { structure, destruction } => {
+                *destruction = (*destruction - ctx.delta_time).max(0.0);
+
+                if let Some(s) = structure {
+                    s.update(ctx, cfg); 
                 }
             }
             Self::Farmed { time, plant } => {

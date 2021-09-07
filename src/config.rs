@@ -8,8 +8,28 @@ pub struct Controls {
     pub down: Key,
     pub left: Key,
     pub right: Key,
+    pub toggle_fullscreen: Key,
+    pub primary: MouseButton,
+    pub secondary: MouseButton,
     pub camera_speed: f32,
     pub item_offset: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Window {
+    pub cursor_grab: bool,
+    pub maximized_default: bool,
+    pub fullscreen_default: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Graphics {
+    pub custom_cursor: bool,
+    pub always_show_stack_size: bool,
+    pub d3_scale: u32,
+    pub instance_cloth: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -28,20 +48,14 @@ pub struct Plants {
 #[serde(rename_all = "kebab-case")]
 pub struct Wheat {
     pub growth_time: f32,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct Graphics {
-    pub always_show_stack_size: bool,
-    pub d3_scale: u32,
-    pub instance_cloth: bool,
+    pub growth_variance: f32,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
     pub controls: Controls,
+    pub window: Window,
     pub graphics: Graphics,
     pub tile: Tile,
     pub plants: Plants,

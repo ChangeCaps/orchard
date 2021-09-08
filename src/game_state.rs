@@ -8,16 +8,9 @@ use ike::{
     },
     prelude::*,
 };
+use kira::manager::AudioManager;
 
-use crate::{
-    assets::Assets,
-    cloth::Cloth,
-    config::Config,
-    iso::{from_iso, to_iso},
-    item::Items,
-    render::Ctx,
-    tile::Tile,
-};
+use crate::{assets::Assets, audio::Audio, cloth::Cloth, config::Config, iso::{from_iso, to_iso}, item::Items, render::Ctx, tile::Tile};
 
 pub struct OrthographicCamera {
     pub projection: OrthographicProjection,
@@ -49,6 +42,8 @@ impl OrthographicCamera {
 
 pub struct GameState {
     pub assets: Assets,
+    pub audio: Audio,
+    pub audio_manager: AudioManager,
     pub config: Config,
     pub cloth: Cloth,
     pub main_camera: OrthographicCamera,
@@ -181,7 +176,7 @@ impl State for GameState {
             {
                 let position = from_iso(position.as_f32(), Vec2::splat(40.0));
 
-                tile.hovered(ctx, &self.config, position, &mut self.items);
+                tile.hovered(ctx, &self.config, &mut self.audio, position, &mut self.items);
             }
 
             tile.update(ctx, &mut self.items, &self.config);
@@ -215,6 +210,7 @@ impl State for GameState {
 
 impl GameState {
     pub fn load() -> ike::anyhow::Result<Self> {
+        let mut audio_manager = AudioManager::new(Default::default())?;
         let mut tiles = HashMap::new();
 
         for x in -1..=1 {
@@ -225,8 +221,13 @@ impl GameState {
 
         let config = read_to_string("./config.toml")?;
 
+        let audio = Audio::load(&mut audio_manager)?;
+        let assets = Assets::load()?; 
+
         Ok(Self {
-            assets: Assets::load()?,
+            assets,
+            audio,
+            audio_manager,
             config: toml::from_str(&config)?,
             cloth: Cloth::generate(15, 4),
             main_camera: OrthographicCamera::new(),
@@ -235,7 +236,7 @@ impl GameState {
             time: 0.0,
             mouse_position: Default::default(),
         })
-    }
+    } 
 
     #[inline]
     pub fn render(&mut self, ctx: &mut Ctx) {

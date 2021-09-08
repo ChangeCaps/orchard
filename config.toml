@@ -49,4 +49,5 @@ grass-growth-time = 30.0
 [plants.wheat]
 # time it takes wheat to grow each stage
 growth-time = 10.0 
+# amount of variance in wheat growth
 growth-variance = 0.075

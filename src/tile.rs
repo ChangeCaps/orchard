@@ -7,9 +7,10 @@ use ike::{
     d2::{render::Render2dCtx, sprite::Sprite, transform2d::Transform2d},
     prelude::*,
 };
+use kira::{Value, instance::InstanceSettings};
 use rand::{Rng, SeedableRng};
 
-use crate::{assets::Assets, cloth::Cloth, config::Config, iso::from_iso, item::{ItemType, Items}, render::Ctx, tree::{Tree, TreeStage}};
+use crate::{assets::Assets, audio::Audio, cloth::Cloth, config::Config, iso::from_iso, item::{ItemType, Items}, render::Ctx, tree::{Tree, TreeStage}};
 
 #[derive(Debug)]
 pub enum FarmPlant {
@@ -301,6 +302,7 @@ impl Tile {
         &mut self,
         ctx: &mut UpdateCtx,
         cfg: &Config,
+        audio: &mut Audio,
         position: Vec2,
         items: &mut Items,
     ) {
@@ -337,6 +339,12 @@ impl Tile {
             Self::Grass { structure, destruction } => {
                 if ctx.mouse_input.pressed(&cfg.controls.secondary) {
                     *destruction += 1.0;
+                    
+                    let mut settings = InstanceSettings::new();
+                    
+                    settings.volume = Value::Fixed(0.3);
+
+                    audio.hit_arrangement.play(settings).unwrap();
                 }
 
                 if *destruction > 3.0 && ctx.mouse_input.released(&cfg.controls.secondary) {

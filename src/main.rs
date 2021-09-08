@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 mod assets;
+mod audio;
 mod cloth;
 mod config;
 mod game_state;

@@ -2,7 +2,7 @@ use ike::prelude::*;
 
 pub struct Assets {
     pub font: Font,
-    
+
     pub cursor: Texture,
     pub base_tile: Texture,
     pub farm_tile: Texture,
@@ -20,9 +20,9 @@ pub struct Assets {
 
 impl Assets {
     #[inline]
-    pub fn load() -> ike::anyhow::Result<Self> { 
+    pub fn load() -> ike::anyhow::Result<Self> {
         Ok(Self {
-            font: Font::load("assets/misc/font.ttf", 30.0)?,            
+            font: Font::load("assets/misc/font.ttf", 30.0)?,
             cursor: Texture::load("assets/misc/cursor.png")?,
             base_tile: Texture::load("assets/tiles/base_tile.png")?,
             farm_tile: Texture::load("assets/tiles/farm_tile.png")?,

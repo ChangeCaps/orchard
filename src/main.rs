@@ -12,8 +12,8 @@ mod tile;
 mod tree;
 
 use game_state::GameState;
-use ike::{d2::render::SpriteNode2d, prelude::*};
-use render::RenderNode;
+use ike::{d2::render::SpriteNode2d, d3::D3Node, prelude::*};
+use render::{D3Pass, RenderNode};
 
 const CLEAR_COLOR: Color = Color::rgb(123.0 / 255.0, 216.0 / 255.0, 213.0 / 255.0);
 
@@ -24,6 +24,12 @@ fn main() {
         .unwrap();
 
     let mut app = App::new();
+
+    let mut d3_pass = Pass::new(D3Pass::default());
+
+    d3_pass.push(D3Node::default());
+
+    app.renderer.insert_before::<MainPass>(d3_pass);
 
     let mut main_pass = app.renderer.pass_mut::<MainPass>().unwrap();
 

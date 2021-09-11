@@ -10,7 +10,7 @@ resolver = "2"
 [dependencies]
 bytemuck = { version = "1.7.2", features = ["derive"] }
 glam = { version = "0.17.3", features = ["bytemuck"] }
-ike = { path = "../ike" }
+ike = { path = "../ike", features = ["runner"] }
 kira = "0.5.3"
 log = "0.4.14"
 obj-rs = "0.6.3"

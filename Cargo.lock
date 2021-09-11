@@ -950,6 +950,10 @@ dependencies = [
 [[package]]
 name = "ike-wgpu"
 version = "0.0.1"
+dependencies = [
+ "wgpu",
+ "wgpu-types",
+]
 
 [[package]]
 name = "image"

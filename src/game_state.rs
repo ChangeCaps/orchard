@@ -6,11 +6,21 @@ use ike::{
         sprite::Sprite,
         transform2d::Transform2d,
     },
+    d3::{Render3d, Render3dCtx},
     prelude::*,
+    wgpu::TextureView,
 };
 use kira::manager::AudioManager;
 
-use crate::{assets::Assets, audio::Audio, cloth::Cloth, config::Config, iso::{from_iso, to_iso}, item::Items, render::Ctx, tile::Tile};
+use crate::{
+    assets::Assets,
+    audio::Audio,
+    cloth::Cloth,
+    config::Config,
+    iso::{from_iso, to_iso},
+    item::Items,
+    tile::Tile,
+};
 
 pub struct OrthographicCamera {
     pub projection: OrthographicProjection,
@@ -44,6 +54,7 @@ pub struct GameState {
     pub assets: Assets,
     pub audio: Audio,
     pub audio_manager: AudioManager,
+    pub d3_buffer: FrameBuffer,
     pub config: Config,
     pub cloth: Cloth,
     pub main_camera: OrthographicCamera,
@@ -100,6 +111,30 @@ impl Render2d for GameState {
     }
 }
 
+impl Render3d for GameState {
+    #[inline]
+    fn render(&mut self, ctx: &mut Render3dCtx) {
+        let mut transform = Transform3d::IDENTITY;
+        transform.rotation = Quat::from_rotation_x(0.5f32.asin());
+        transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_4);
+
+        for (position, tile) in &self.tiles {
+            let d = position.x as f32 + position.y as f32;
+
+            // calculate tile floating offset
+            let offset = (d * 2.0 + self.time * 0.5).sin() * 1.0;
+
+            let position = Vec3::new(
+                position.x as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
+                offset,
+                -position.y as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
+            );
+
+            tile.render_mesh(ctx, position, &transform, &self.cloth, &self.config);
+        }
+    }
+}
+
 impl State for GameState {
     fn start(&mut self, ctx: &mut StartCtx) {
         ctx.window.maximized = self.config.window.maximized_default;
@@ -115,7 +150,10 @@ impl State for GameState {
         // advance time
         self.time += ctx.delta_time;
 
-        if ctx.key_input.pressed(&self.config.controls.toggle_fullscreen) {
+        if ctx
+            .key_input
+            .pressed(&self.config.controls.toggle_fullscreen)
+        {
             ctx.window.fullscreen = !ctx.window.fullscreen;
 
             if self.config.window.cursor_grab {
@@ -176,7 +214,13 @@ impl State for GameState {
             {
                 let position = from_iso(position.as_f32(), Vec2::splat(40.0));
 
-                tile.hovered(ctx, &self.config, &mut self.audio, position, &mut self.items);
+                tile.hovered(
+                    ctx,
+                    &self.config,
+                    &mut self.audio,
+                    position,
+                    &mut self.items,
+                );
             }
 
             tile.update(ctx, &mut self.items, &self.config);
@@ -222,12 +266,13 @@ impl GameState {
         let config = read_to_string("./config.toml")?;
 
         let audio = Audio::load(&mut audio_manager)?;
-        let assets = Assets::load()?; 
+        let assets = Assets::load()?;
 
         Ok(Self {
             assets,
             audio,
             audio_manager,
+            d3_buffer: Default::default(),
             config: toml::from_str(&config)?,
             cloth: Cloth::generate(15, 4),
             main_camera: OrthographicCamera::new(),
@@ -236,27 +281,5 @@ impl GameState {
             time: 0.0,
             mouse_position: Default::default(),
         })
-    } 
-
-    #[inline]
-    pub fn render(&mut self, ctx: &mut Ctx) {
-        let mut transform = Transform3d::IDENTITY;
-        transform.rotation = Quat::from_rotation_x(0.5f32.asin());
-        transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_4);
-
-        for (position, tile) in &self.tiles {
-            let d = position.x as f32 + position.y as f32;
-
-            // calculate tile floating offset
-            let offset = (d * 2.0 + self.time * 0.5).sin() * 1.0;
-
-            let position = Vec3::new(
-                position.x as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
-                offset,
-                -position.y as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
-            );
-
-            tile.render_mesh(ctx, position, &transform, &self.cloth, &self.config);
-        }
     }
 }

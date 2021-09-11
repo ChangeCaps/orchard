@@ -5,12 +5,21 @@ use std::{
 
 use ike::{
     d2::{render::Render2dCtx, sprite::Sprite, transform2d::Transform2d},
+    d3::Render3dCtx,
     prelude::*,
 };
-use kira::{Value, instance::InstanceSettings};
+use kira::{instance::InstanceSettings, Value};
 use rand::{Rng, SeedableRng};
 
-use crate::{assets::Assets, audio::Audio, cloth::Cloth, config::Config, iso::from_iso, item::{ItemType, Items}, render::Ctx, tree::{Tree, TreeStage}};
+use crate::{
+    assets::Assets,
+    audio::Audio,
+    cloth::Cloth,
+    config::Config,
+    iso::from_iso,
+    item::{ItemType, Items},
+    tree::{Tree, TreeStage},
+};
 
 #[derive(Debug)]
 pub enum FarmPlant {
@@ -31,7 +40,7 @@ impl FarmPlant {
                     _ => &mut assets.wheat_3,
                 }
             }
-        } 
+        }
     }
 
     #[inline]
@@ -113,14 +122,14 @@ impl Structure {
             _ => {}
         }
     }
-    
+
     #[inline]
     pub fn destroy(self, position: Vec2, _ctx: &mut UpdateCtx, items: &mut Items, _cfg: &Config) {
         #[allow(unreachable_patterns)]
         match self {
             Self::Pole { .. } => {
                 items.spawn(ItemType::Pole, position, 1);
-            },
+            }
             Self::Tree(tree) => {
                 if let TreeStage::Grown = tree.stage {
                     items.spawn(ItemType::Wood, position + Vec2::new(-4.0, -2.0), 1);
@@ -129,7 +138,7 @@ impl Structure {
                     items.spawn(ItemType::Sapling, position, 1);
                 }
             }
-            _ => {},
+            _ => {}
         }
     }
 
@@ -144,7 +153,7 @@ impl Structure {
     #[inline]
     pub fn mesh_render(
         &self,
-        ctx: &mut Ctx,
+        ctx: &mut Render3dCtx,
         position: Vec3,
         transform: &Transform3d,
         instanced_cloth: &Cloth,
@@ -156,30 +165,39 @@ impl Structure {
                     * Transform3d::from_translation(position + Vec3::new(-5.0, 30.5, 0.0));
 
                 if cfg.graphics.instance_cloth {
-                    ctx.render_mesh(&instanced_cloth.mesh, transform.matrix());
+                    ctx.draw_mesh(&instanced_cloth.mesh, &transform);
                 } else {
-                    ctx.render_mesh(&cloth.mesh, transform.matrix());
+                    ctx.draw_mesh(&cloth.mesh, &transform);
                 }
             }
             Self::Tree(tree) => {
                 let transform =
                     transform * Transform3d::from_translation(position + Vec3::new(0.0, 0.0, 0.0));
 
-                ctx.render_mesh(&tree.mesh, transform.matrix());
+                ctx.draw_mesh(&tree.mesh, &transform);
             }
         }
     }
 }
 
 pub enum Tile {
-    Grass { structure: Option<Structure>, destruction: f32, },
-    Farmed { time: f32, plant: Option<FarmPlant> },
+    Grass {
+        structure: Option<Structure>,
+        destruction: f32,
+    },
+    Farmed {
+        time: f32,
+        plant: Option<FarmPlant>,
+    },
 }
 
 impl Tile {
     #[inline]
     pub fn grass_plain() -> Self {
-        Self::Grass { structure: None, destruction: 0.0 }
+        Self::Grass {
+            structure: None,
+            destruction: 0.0,
+        }
     }
 
     #[inline]
@@ -192,7 +210,10 @@ impl Tile {
             _ => None,
         };
 
-        Self::Grass { structure, destruction: 0.0 }
+        Self::Grass {
+            structure,
+            destruction: 0.0,
+        }
     }
 
     #[inline]
@@ -280,7 +301,7 @@ impl Tile {
     #[inline]
     pub fn render_mesh(
         &self,
-        ctx: &mut Ctx,
+        ctx: &mut Render3dCtx,
         position: Vec3,
         transform: &Transform3d,
         instanced_cloth: &Cloth,
@@ -307,9 +328,7 @@ impl Tile {
         items: &mut Items,
     ) {
         match self {
-            Self::Grass {
-                structure, ..
-            } if structure.is_none() => {
+            Self::Grass { structure, .. } if structure.is_none() => {
                 if ctx.mouse_input.down(&cfg.controls.secondary) {
                     match items.drag_ty() {
                         None => {
@@ -326,7 +345,7 @@ impl Tile {
                         }
                         Some(ItemType::Pole) => {
                             items.consume();
-                            *structure = Some(Structure::pole()); 
+                            *structure = Some(Structure::pole());
                         }
                         Some(ItemType::Sapling) => {
                             items.consume();
@@ -336,12 +355,15 @@ impl Tile {
                     }
                 }
             }
-            Self::Grass { structure, destruction } => {
+            Self::Grass {
+                structure,
+                destruction,
+            } => {
                 if ctx.mouse_input.pressed(&cfg.controls.secondary) {
                     *destruction += 1.0;
-                    
+
                     let mut settings = InstanceSettings::new();
-                    
+
                     settings.volume = Value::Fixed(0.3);
 
                     audio.hit_arrangement.play(settings).unwrap();
@@ -385,11 +407,14 @@ impl Tile {
     #[inline]
     pub fn update(&mut self, ctx: &mut UpdateCtx, items: &mut Items, cfg: &Config) {
         match self {
-            Self::Grass { structure, destruction } => {
+            Self::Grass {
+                structure,
+                destruction,
+            } => {
                 *destruction = (*destruction - ctx.delta_time).max(0.0);
 
                 if let Some(s) = structure {
-                    s.update(ctx, cfg); 
+                    s.update(ctx, cfg);
                 }
             }
             Self::Farmed { time, plant } => {

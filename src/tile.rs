@@ -3,11 +3,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use ike::{
-    d2::{render::Render2dCtx, sprite::Sprite, transform2d::Transform2d},
-    d3::Render3dCtx,
-    prelude::*,
-};
+use ike::prelude::*;
 use kira::{instance::InstanceSettings, Value};
 use rand::{Rng, SeedableRng};
 
@@ -16,6 +12,7 @@ use crate::{
     audio::Audio,
     cloth::Cloth,
     config::Config,
+    game_state::GameState,
     iso::from_iso,
     item::{ItemType, Items},
     tree::{Tree, TreeStage},
@@ -153,7 +150,7 @@ impl Structure {
     #[inline]
     pub fn mesh_render(
         &self,
-        ctx: &mut Render3dCtx,
+        ctx: &mut UpdateCtx,
         position: Vec3,
         transform: &Transform3d,
         instanced_cloth: &Cloth,
@@ -165,16 +162,16 @@ impl Structure {
                     * Transform3d::from_translation(position + Vec3::new(-5.0, 30.5, 0.0));
 
                 if cfg.graphics.instance_cloth {
-                    ctx.draw_mesh(&instanced_cloth.mesh, &transform);
+                    ctx.draw(&instanced_cloth.mesh.render_3d(&transform));
                 } else {
-                    ctx.draw_mesh(&cloth.mesh, &transform);
+                    ctx.draw(&cloth.mesh.render_3d(&transform));
                 }
             }
             Self::Tree(tree) => {
                 let transform =
                     transform * Transform3d::from_translation(position + Vec3::new(0.0, 0.0, 0.0));
 
-                ctx.draw_mesh(&tree.mesh, &transform);
+                ctx.draw(&tree.mesh.render_3d(&transform)); 
             }
         }
     }
@@ -225,7 +222,13 @@ impl Tile {
     }
 
     #[inline]
-    pub fn draw(&self, ctx: &mut Render2dCtx, tile_pos: Vec2, assets: &mut Assets, cfg: &Config) {
+    pub fn draw(
+        &self,
+        ctx: &mut UpdateCtx,
+        tile_pos: Vec2,
+        assets: &mut Assets,
+        cfg: &Config,
+    ) {
         match self {
             Self::Farmed {
                 plant: Some(plant), ..
@@ -250,23 +253,16 @@ impl Tile {
 
                         let texture = plant.texture(assets, cfg, p);
 
-                        let sprite = Sprite {
-                            view: texture
-                                .texture(ctx.render_ctx)
-                                .create_view(&Default::default()),
-                            transform: Transform2d::from_translation(
+                        let mut sprite = Sprite::new(
+                            texture,
+                            Transform2d::from_translation(
                                 pos + Vec2::new(0.0, texture.height() as f32 / 2.0),
-                            )
-                            .matrix(),
-                            depth: -pos.y / 0.5f32.asin().tan(),
-                            width: texture.width() as f32,
-                            height: texture.height() as f32,
-                            min: Vec2::ZERO,
-                            max: Vec2::ONE,
-                            texture_id: texture.id(),
-                        };
+                            ),
+                        );
 
-                        ctx.draw_sprite(sprite);
+                        sprite.depth = -pos.y / 0.5f32.asin().tan();
+
+                        ctx.draw(&sprite);
                     }
                 }
             }
@@ -277,21 +273,14 @@ impl Tile {
                 let texture = structure.texture(assets);
 
                 if let Some(texture) = texture {
-                    let sprite = Sprite {
-                        view: texture
-                            .texture(ctx.render_ctx)
-                            .create_view(&Default::default()),
-                        transform: Transform2d::from_translation(tile_pos + Vec2::new(0.0, 14.0))
-                            .matrix(),
-                        depth: -(tile_pos.y - 2.0) / 0.5f32.asin().tan(),
-                        width: texture.width() as f32,
-                        height: texture.height() as f32,
-                        min: Vec2::ZERO,
-                        max: Vec2::ONE,
-                        texture_id: texture.id(),
-                    };
+                    let mut sprite = Sprite::new(
+                        texture,
+                        Transform2d::from_translation(tile_pos + Vec2::new(0.0, 14.0)),
+                    );
 
-                    ctx.draw_sprite(sprite);
+                    sprite.depth = -(tile_pos.y - 2.0) / 0.5f32.asin().tan();
+
+                    ctx.draw(&sprite);
                 }
             }
             _ => {}
@@ -301,7 +290,7 @@ impl Tile {
     #[inline]
     pub fn render_mesh(
         &self,
-        ctx: &mut Render3dCtx,
+        ctx: &mut UpdateCtx,
         position: Vec3,
         transform: &Transform3d,
         instanced_cloth: &Cloth,
@@ -312,7 +301,13 @@ impl Tile {
                 structure: Some(structure),
                 ..
             } => {
-                structure.mesh_render(ctx, position, transform, instanced_cloth, cfg);
+                structure.mesh_render(
+                    ctx,
+                    position,
+                    transform,
+                    instanced_cloth,
+                    cfg,
+                );
             }
             _ => {}
         }

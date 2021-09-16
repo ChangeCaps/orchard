@@ -1,15 +1,6 @@
 use std::{collections::HashMap, fs::read_to_string};
 
-use ike::{
-    d2::{
-        render::{Render2d, Render2dCtx},
-        sprite::Sprite,
-        transform2d::Transform2d,
-    },
-    d3::{Render3d, Render3dCtx},
-    prelude::*,
-    wgpu::TextureView,
-};
+use ike::prelude::*;
 use kira::manager::AudioManager;
 
 use crate::{
@@ -45,8 +36,13 @@ impl OrthographicCamera {
     }
 
     #[inline]
-    pub fn view_proj(&self) -> Mat4 {
-        self.projection.proj_matrix() * self.transform.matrix4x4().inverse()
+    pub fn camera(&self) -> Camera {
+        Camera {
+            id: self.projection.id(),
+            position: self.transform.translation.extend(0.0),
+            proj: self.projection.proj_matrix(),
+            view: self.transform.matrix4x4(),
+        }
     }
 }
 
@@ -62,77 +58,6 @@ pub struct GameState {
     pub tiles: HashMap<IVec2, Tile>,
     pub time: f32,
     pub mouse_position: Vec2,
-}
-
-impl Render2d for GameState {
-    fn render(&mut self, ctx: &mut Render2dCtx) {
-        self.items.render(ctx, &mut self.assets, &self.config);
-
-        if self.config.graphics.custom_cursor {
-            ctx.draw_texture_depth(
-                &mut self.assets.cursor,
-                &Transform2d::from_translation(self.mouse_position),
-                500.0,
-            );
-        }
-
-        // draw tiles
-        for (position, tile) in &self.tiles {
-            let d = position.x as f32 + position.y as f32;
-
-            // calculate tile floating offset
-            let offset = (d * 2.0 + self.time * 0.5).sin();
-
-            // convert from isometric to cartesian
-            let mut tile_pos = from_iso(position.as_f32(), Vec2::splat(40.0));
-            tile_pos += Vec2::new(0.0, offset);
-
-            let texture = tile.texture(&mut self.assets);
-
-            let sprite = Sprite {
-                view: texture
-                    .texture(ctx.render_ctx)
-                    .create_view(&Default::default()),
-                // offset tile by 8 pixels so it lines up correctly
-                transform: Transform2d::from_translation(tile_pos + Vec2::new(0.0, -8.0)).matrix(),
-                depth: -(tile_pos.y + 8.0) / 0.5f32.asin().tan(),
-                width: texture.width() as f32,
-                height: texture.height() as f32,
-                min: Vec2::ZERO,
-                max: Vec2::ONE,
-                texture_id: texture.id(),
-            };
-
-            ctx.draw_sprite(sprite);
-
-            // draw plants on tile
-            tile.draw(ctx, tile_pos, &mut self.assets, &self.config);
-        }
-    }
-}
-
-impl Render3d for GameState {
-    #[inline]
-    fn render(&mut self, ctx: &mut Render3dCtx) {
-        let mut transform = Transform3d::IDENTITY;
-        transform.rotation = Quat::from_rotation_x(0.5f32.asin());
-        transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_4);
-
-        for (position, tile) in &self.tiles {
-            let d = position.x as f32 + position.y as f32;
-
-            // calculate tile floating offset
-            let offset = (d * 2.0 + self.time * 0.5).sin() * 1.0;
-
-            let position = Vec3::new(
-                position.x as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
-                offset,
-                -position.y as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
-            );
-
-            tile.render_mesh(ctx, position, &transform, &self.cloth, &self.config);
-        }
-    }
 }
 
 impl State for GameState {
@@ -244,11 +169,80 @@ impl State for GameState {
                 ),
             );
         }
-    }
 
-    #[inline]
-    fn render(&mut self, views: &mut Views) {
-        views.render_main_view(self.main_camera.id(), self.main_camera.view_proj());
+        self.items
+            .render(ctx, &mut self.assets, &self.config);
+
+        if self.config.graphics.custom_cursor {
+            let mut sprite = Sprite::new(
+                &self.assets.cursor,
+                Transform2d::from_translation(self.mouse_position),
+            );
+            sprite.depth = 500.0;
+
+            ctx.draw(&sprite);
+        }
+
+        // draw tiles
+        for (position, tile) in &self.tiles {
+            let d = position.x as f32 + position.y as f32;
+
+            // calculate tile floating offset
+            let offset = (d * 2.0 + self.time * 0.5).sin();
+
+            // convert from isometric to cartesian
+            let mut tile_pos = from_iso(position.as_f32(), Vec2::splat(40.0));
+            tile_pos += Vec2::new(0.0, offset);
+
+            let texture = tile.texture(&mut self.assets);
+
+            let mut sprite = Sprite::new(
+                texture,
+                Transform2d::from_translation(tile_pos + Vec2::new(0.0, -8.0)),
+            );
+
+            sprite.depth = -(tile_pos.y + 8.0) / 0.5f32.asin().tan();
+
+            ctx.draw(&sprite); 
+
+            // draw plants on tile
+            tile.draw(
+                ctx,
+                tile_pos,
+                &mut self.assets,
+                &self.config,
+            );
+        }
+
+        // 3d
+        let mut transform = Transform3d::IDENTITY;
+        transform.rotation = Quat::from_rotation_x(0.5f32.asin());
+        transform.rotation *= Quat::from_rotation_y(std::f32::consts::FRAC_PI_4);
+
+        for (position, tile) in &self.tiles {
+            let d = position.x as f32 + position.y as f32;
+
+            // calculate tile floating offset
+            let offset = (d * 2.0 + self.time * 0.5).sin() * 1.0;
+
+            let position = Vec3::new(
+                position.x as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
+                offset,
+                -position.y as f32 * 40.0 * std::f32::consts::FRAC_1_SQRT_2,
+            );
+
+            tile.render_mesh(
+                ctx,
+                position,
+                &transform,
+                &self.cloth,
+                &self.config,
+            );
+        }
+
+        ctx.views.render_main_view(
+            self.main_camera.camera(),
+        );
     }
 }
 

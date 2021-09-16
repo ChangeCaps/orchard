@@ -1,11 +1,8 @@
 use std::collections::HashMap;
 
-use ike::{
-    d2::{render::Render2dCtx, sprite::Sprite},
-    prelude::*,
-};
+use ike::prelude::*;
 
-use crate::{assets::Assets, config::Config, iso::to_iso, tile::Tile};
+use crate::{assets::Assets, config::Config, game_state::GameState, iso::to_iso, tile::Tile};
 
 #[derive(PartialEq, Eq)]
 pub enum ItemType {
@@ -176,38 +173,38 @@ impl Items {
     }
 
     #[inline]
-    pub fn render(&self, ctx: &mut Render2dCtx, assets: &mut Assets, config: &Config) {
+    pub fn render(
+        &self,
+        ctx: &mut UpdateCtx,
+        assets: &mut Assets,
+        config: &Config,
+    ) {
         for (_id, item) in &self.items {
             if item.count > 1 || config.graphics.always_show_stack_size {
-                ctx.draw_text_depth(
+                let mut text = TextSprite::new(
                     &assets.font,
-                    &format!("{}", item.count),
-                    &Transform2d::from_translation(
+                    Transform2d::from_translation(
                         item.position.truncate() + Vec2::Y * item.position.z + Vec2::Y * 18.0,
                     ),
-                    4.0,
-                    -item.position.y / 0.5f32.asin().tan(),
                 );
+
+                text.depth = -item.position.y / 0.5f32.asin().tan();
+
+                ctx.draw(&text);
             }
 
             let texture = item.ty.texture(assets);
 
             let position = item.position.truncate() + Vec2::Y * item.position.z;
 
-            let sprite = Sprite {
-                view: texture
-                    .texture(ctx.render_ctx)
-                    .create_view(&Default::default()),
-                transform: Transform2d::from_translation(position + Vec2::Y * 8.0).matrix(),
-                depth: -item.position.y / 0.5f32.asin().tan(),
-                width: texture.width() as f32,
-                height: texture.height() as f32,
-                min: Vec2::ZERO,
-                max: Vec2::ONE,
-                texture_id: texture.id(),
-            };
+            let mut sprite = Sprite::new(
+                texture,
+                Transform2d::from_translation(position + Vec2::Y * 8.0),
+            );
 
-            ctx.draw_sprite(sprite);
+            sprite.depth = -item.position.y / 0.5f32.asin().tan();
+
+            ctx.draw(&sprite);
         }
     }
 }

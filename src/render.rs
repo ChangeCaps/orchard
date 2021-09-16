@@ -25,7 +25,7 @@ impl RenderPass<GameState> for D3Pass {
             width: state.d3_buffer.descriptor.width,
             height: state.d3_buffer.descriptor.height,
         });
-        data.insert(ViewProj(view.view_proj));
+        data.insert(view.camera.clone());
 
         let height = state.config.graphics.d3_scale;
 
@@ -33,7 +33,7 @@ impl RenderPass<GameState> for D3Pass {
 
         let width = (aspect * height as f32).floor() as u32;
 
-        state.d3_buffer.descriptor.width = width; 
+        state.d3_buffer.descriptor.width = width;
         state.d3_buffer.descriptor.height = height;
         state.d3_buffer.descriptor.usage |= wgpu::TextureUsages::TEXTURE_BINDING;
 

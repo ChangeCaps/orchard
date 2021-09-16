@@ -29,14 +29,22 @@ fn main() {
 
     d3_pass.push(D3Node::default());
 
-    app.renderer.insert_before::<MainPass>(d3_pass);
+    app.renderer.push(d3_pass);
 
-    let mut main_pass = app.renderer.pass_mut::<MainPass>().unwrap();
+    let mut main_pass = MainPass::default();
+
+    main_pass.clear_color = CLEAR_COLOR;
+    main_pass.sample_count = 4;
+
+    let mut main_pass = Pass::new(main_pass);
 
     main_pass.push(RenderNode::default());
     main_pass.push(SpriteNode2d::new());
-    main_pass.clear_color = CLEAR_COLOR;
-    main_pass.sample_count = 4;
+
+    #[cfg(debug_assertions)]
+    main_pass.push(DebugNode::default());
+
+    app.renderer.push(main_pass);
 
     app.run(GameState::load().unwrap())
 }
